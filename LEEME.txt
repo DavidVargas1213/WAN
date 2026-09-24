@@ -1,0 +1,47 @@
+GENERADOR DE VIDEO CON WAN3.0 (Alibaba Cloud Model Studio)
+==========================================================
+
+Qué necesitas
+-------------
+1. Python 3.8 o superior instalado (https://www.python.org/downloads/).
+   No hay que instalar ninguna librería extra.
+2. Tu PROPIA cuenta de Alibaba Cloud Model Studio:
+   - API key:      https://help.aliyun.com/en/model-studio/get-api-key
+   - Workspace ID: https://help.aliyun.com/en/model-studio/obtain-the-app-id-and-workspace-id
+   - El modelo wan3.0-video-prime (o wan3.0-video) activado en el Model Gallery.
+   La API key, el workspace y el modelo deben ser de la MISMA región
+   (por ejemplo, todo en Singapore). Si no, la llamada falla.
+
+Cómo usarlo
+-----------
+1. Descomprime esta carpeta.
+2. Windows: doble clic en iniciar.bat
+   Mac/Linux: en una terminal, dentro de la carpeta, ejecuta:  python3 servidor.py
+3. Se abre el navegador en http://127.0.0.1:8000
+   (si no se abre, copia esa dirección en el navegador).
+4. Escribe tu API key, tu Workspace ID y la región; luego el prompt y dale a "Generar video".
+5. Espera de 1 a 5 minutos. Cuando termine, descarga el mp4 (el enlace vence en 24 horas).
+
+Para detenerlo: cierra la ventana negra o presiona Ctrl+C.
+
+Publicarlo en internet (URL para varias personas)
+-------------------------------------------------
+Un hosting estático (GitHub Pages, Netlify) NO sirve: la API de Alibaba bloquea las llamadas
+desde el navegador, así que hace falta desplegar servidor.py como servicio web.
+- Sirve cualquier plataforma que ejecute Python o Docker (Render, Railway, Fly.io, Function
+  Compute de Alibaba, etc.). No hay build ni dependencias: comando de arranque "python servidor.py"
+  (o usa el Dockerfile incluido).
+- La plataforma define la variable PORT; con eso el servidor escucha en toda la red
+  y NO abre el navegador. Debe publicarse con HTTPS (las plataformas lo dan por defecto).
+- /salud responde {"ok": true} para los chequeos de salud.
+- Protecciones incluidas: máximo 60 peticiones por minuto por IP, cuerpos de hasta 64 KB y
+  descargas solo desde aliyuncs.com. Cada persona usa su propia API key; el servidor no la guarda.
+- No pongas tu API key en variables de entorno ni en el código del servidor: no la necesita.
+
+Notas
+-----
+- Cada generación consume saldo de TU cuenta. Para probar usa 480P y 5 segundos.
+- La API key no se guarda en disco ni en el navegador. Solo viaja a este programa local
+  (127.0.0.1) y de ahí a Alibaba.
+- No compartas tu API key con nadie: quien la tenga puede gastar tu saldo.
+- Wan3.0 está en preview: los modelos y precios pueden cambiar.

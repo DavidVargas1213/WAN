@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Generador de video Wan3.0</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1b1f24; --muted: #5f6b7a;
+    --line: #dde2e8; --accent: #e8590c; --accent-dark: #c74a08; --ok: #1f8a4c; --err: #c92a2a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171b; --card: #1d2126; --text: #e8ebef; --muted: #98a2b0;
+      --line: #313840; --accent: #ff7a2f; --accent-dark: #ff9155; --ok: #4cc47e; --err: #ff6b6b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 28px 20px 60px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 22px; }
+  .grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+  @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+  .card + .card { margin-top: 16px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; }
+  label { display: block; font-weight: 600; margin: 12px 0 4px; font-size: 14px; }
+  label:first-of-type { margin-top: 0; }
+  input, select, textarea { width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg); color: var(--text); font: inherit; }
+  textarea { min-height: 120px; resize: vertical; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .hint { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
+  .check { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-weight: 400; }
+  .check input { width: auto; }
+  button { font: inherit; cursor: pointer; }
+  #generar { width: 100%; margin-top: 16px; padding: 12px; border: 0; border-radius: 8px;
+    background: var(--accent); color: #fff; font-weight: 700; font-size: 16px; }
+  #generar:hover:not(:disabled) { background: var(--accent-dark); }
+  #generar:disabled { opacity: .55; cursor: not-allowed; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 999px;
+    padding: 4px 11px; font-size: 13px; }
+  .chip:hover { border-color: var(--accent); }
+  .aviso { border-left: 3px solid var(--accent); padding: 8px 12px; background: var(--bg);
+    border-radius: 0 8px 8px 0; font-size: 13px; color: var(--muted); }
+  #estado { min-height: 24px; font-weight: 600; }
+  #estado.ok { color: var(--ok); } #estado.err { color: var(--err); }
+  #detalle { color: var(--muted); font-size: 13px; white-space: pre-wrap; word-break: break-word; margin-top: 6px; }
+  video { width: 100%; max-height: 560px; background: #000; border-radius: 8px; margin-top: 12px; }
+  .acciones { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+  .acciones a, .acciones button { padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--card); color: var(--text); text-decoration: none; font-size: 14px; }
+  .acciones a:hover, .acciones button:hover { border-color: var(--accent); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Generador de video con Wan3.0</h1>
+  <p class="sub">Escribe una descripción y Alibaba Cloud Model Studio genera el video. Toma entre 1 y 5 minutos.</p>
+  <div id="sinServidor" class="card" hidden style="border-color: var(--err); margin-bottom: 16px;">
+    <b style="color: var(--err);">Esta página no se abre con doble clic.</b>
+    Necesita el programa local: ejecuta <code>iniciar.bat</code> (Windows) o <code>python3 servidor.py</code>
+    (Mac/Linux) y usa la dirección <b>http://127.0.0.1:8000</b> que se abre sola en el navegador.
+  </div>
+
+  <div class="grid">
+    <div>
+      <section class="card">
+        <h2>1. Tu cuenta de Model Studio</h2>
+        <label for="apikey">API key</label>
+        <input id="apikey" type="password" autocomplete="off" placeholder="sk-...">
+        <div class="row">
+          <div>
+            <label for="workspace">Workspace ID</label>
+            <input id="workspace" autocomplete="off" placeholder="ws-xxxxxxxx">
+          </div>
+          <div>
+            <label for="region">Región</label>
+            <select id="region">
+              <option value="singapore">Singapore</option>
+              <option value="beijing">Beijing</option>
+              <option value="tokyo">Tokyo</option>
+              <option value="frankfurt">Frankfurt</option>
+              <option value="virginia">Virginia</option>
+              <option value="hongkong">Hong Kong</option>
+            </select>
+          </div>
+        </div>
+        <p class="hint">La API key, el workspace y el modelo deben ser de la <b>misma región</b> y el modelo debe estar activado en la consola; si no, la llamada falla.</p>
+        <p class="hint">Tu API key no se guarda: se envía cifrada (HTTPS) a este servidor solo para reenviarla a Alibaba y no queda registrada.</p>
+        <label class="check"><input id="recordar" type="checkbox"> Recordar en este navegador (workspace y región; la API key no se guarda)</label>
+      </section>
+
+      <section class="card">
+        <h2>2. El video</h2>
+        <label for="prompt">Descripción (prompt)</label>
+        <textarea id="prompt" placeholder="Un colibrí bebiendo de una flor en cámara lenta, luz de atardecer..."></textarea>
+        <div class="chips" id="ejemplos"></div>
+
+        <div class="row">
+          <div>
+            <label for="modelo">Modelo</label>
+            <select id="modelo">
+              <option value="wan3.0-video-prime">wan3.0-video-prime (rápido)</option>
+              <option value="wan3.0-video">wan3.0-video (estándar)</option>
+            </select>
+          </div>
+          <div>
+            <label for="resolucion">Resolución</label>
+            <select id="resolucion">
+              <option value="480P">480P (más barato)</option>
+              <option value="720P">720P</option>
+              <option value="1080P">1080P</option>
+            </select>
+          </div>
+          <div>
+            <label for="ratio">Formato</label>
+            <select id="ratio">
+              <option value="16:9">16:9 horizontal (YouTube)</option>
+              <option value="9:16">9:16 vertical (TikTok)</option>
+              <option value="1:1">1:1 cuadrado</option>
+              <option value="4:3">4:3</option>
+              <option value="3:4">3:4</option>
+              <option value="adaptive">Adaptativo</option>
+            </select>
+          </div>
+          <div>
+            <label for="duracion">Duración: <span id="durTxt">5</span> s</label>
+            <input id="duracion" type="range" min="2" max="30" value="5">
+          </div>
+        </div>
+        <label class="check"><input id="audio" type="checkbox" checked> Con audio (no cambia el precio)</label>
+        <label class="check"><input id="extender" type="checkbox" checked> Mejorar el prompt automáticamente (recomendado para prompts cortos)</label>
+
+        <button id="generar">Generar video</button>
+        <p class="hint">Cada generación consume saldo de tu cuenta. Para probar, usa 480P y 5 segundos.</p>
+      </section>
+    </div>
+
+    <div>
+      <section class="card">
+        <h2>Resultado</h2>
+        <div id="estado">Listo para generar.</div>
+        <div id="detalle"></div>
+        <video id="video" controls playsinline hidden></video>
+        <div class="acciones" id="acciones" hidden>
+          <a id="descargar" href="#">Descargar mp4</a>
+          <button id="copiar" type="button">Copiar task_id</button>
+        </div>
+      </section>
+      <section class="card">
+        <div class="aviso">
+          El enlace del video vence a las 24 horas: descárgalo. No cierres esta pestaña mientras se genera.
+          No lances varias tareas iguales mientras esperas.
+        </div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const EJEMPLOS = [
+  "Un colibrí bebiendo de una flor en cámara lenta, luz de atardecer",
+  "Toma aérea de una ciudad futurista de noche, autos voladores con luces de neón, lluvia ligera",
+  "Una taza de café humeante girando lentamente sobre una mesa de madera, luz suave de estudio",
+  "Olas rompiendo contra rocas negras al atardecer, niebla ligera, cámara estática",
+];
+const AYUDA = {
+  "InvalidApiKey": "La API key no es válida, o pertenece a otra región distinta a la seleccionada.",
+  "AccessDenied.Unpurchased": "El modelo no está activado para tu workspace en esta región. Actívalo en el Model Gallery de la consola.",
+  "ConexionFallida": "No se pudo conectar con Alibaba. Revisa tu internet, el Workspace ID y la región.",
+};
+let corriendo = false;
+
+function guardar(clave, valor) { try { localStorage.setItem(clave, valor); } catch (e) {} }
+function leer(clave) { try { return localStorage.getItem(clave); } catch (e) { return null; } }
+function borrar(clave) { try { localStorage.removeItem(clave); } catch (e) {} }
+
+function estado(texto, clase = "", detalle = "") {
+  const el = $("estado");
+  el.textContent = texto;
+  el.className = clase;
+  $("detalle").textContent = detalle;
+}
+
+async function api(ruta, cuerpo) {
+  const r = await fetch(ruta, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cuerpo) });
+  const texto = await r.text();
+  let data;
+  try { data = JSON.parse(texto); } catch (e) { data = { code: "RespuestaInvalida", message: texto.slice(0, 300) }; }
+  return { status: r.status, data };
+}
+
+function mensajeError(data) {
+  const codigo = data.code || (data.output && data.output.code) || "Error";
+  const msg = data.message || (data.output && data.output.message) || "";
+  const ayuda = AYUDA[codigo] ? "\n" + AYUDA[codigo] : "";
+  return { titulo: "Falló: " + codigo, detalle: msg + ayuda };
+}
+
+const espera = (ms) => new Promise((res) => setTimeout(res, ms));
+
+async function generar() {
+  if (corriendo) return;
+  const cuenta = { api_key: $("apikey").value.trim(), workspace_id: $("workspace").value.trim(), region: $("region").value };
+  const prompt = $("prompt").value.trim();
+  if (!cuenta.api_key || !cuenta.workspace_id) return estado("Falta la API key o el Workspace ID.", "err");
+  if (!prompt) return estado("Escribe una descripción para el video.", "err");
+
+  if ($("recordar").checked) { guardar("wan_ws", cuenta.workspace_id); guardar("wan_region", cuenta.region); guardar("wan_recordar", "1"); }
+  else { borrar("wan_ws"); borrar("wan_region"); borrar("wan_recordar"); }
+
+  const payload = {
+    model: $("modelo").value,
+    input: { prompt },
+    parameters: {
+      resolution: $("resolucion").value,
+      ratio: $("ratio").value,
+      duration: parseInt($("duracion").value, 10),
+      audio: $("audio").checked,
+      prompt_extend: $("extender").checked,
+      watermark: false,
+    },
+  };
+
+  corriendo = true;
+  $("generar").disabled = true;
+  $("video").hidden = true;
+  $("acciones").hidden = true;
+  estado("Creando la tarea...");
+
+  try {
+    const creada = await api("/api/crear", { ...cuenta, payload });
+    if (creada.status !== 200 || !creada.data.output) {
+      const e = mensajeError(creada.data);
+      return estado(e.titulo, "err", e.detalle);
+    }
+    const taskId = creada.data.output.task_id;
+    const inicio = Date.now();
+    const limite = 15 * 60 * 1000;
+
+    while (true) {
+      const seg = Math.round((Date.now() - inicio) / 1000);
+      const r = await api("/api/estado", { ...cuenta, task_id: taskId });
+      const salida = (r.data && r.data.output) || {};
+      const st = salida.task_status || "UNKNOWN";
+
+      if (st === "SUCCEEDED") {
+        const url = salida.video_url;
+        $("video").src = url;
+        $("video").hidden = false;
+        $("descargar").href = "/descargar?url=" + encodeURIComponent(url);
+        $("copiar").onclick = () => navigator.clipboard && navigator.clipboard.writeText(taskId);
+        $("acciones").hidden = false;
+        return estado("Video listo (" + seg + " s).", "ok", "task_id: " + taskId);
+      }
+      if (["FAILED", "CANCELED", "UNKNOWN"].includes(st)) {
+        const e = mensajeError(salida.code ? salida : r.data);
+        return estado("La tarea terminó en " + st, "err", e.detalle);
+      }
+      if (Date.now() - inicio > limite) return estado("Se agotó el tiempo de espera (15 min).", "err", "task_id: " + taskId);
+
+      estado("Generando... " + seg + " s", "", "Estado: " + st + " · consultando cada 15 s");
+      await espera(15000);
+    }
+  } catch (e) {
+    estado("No se pudo contactar el programa local", "err",
+      "Parece que servidor.py no está corriendo (o se cerró su ventana). Ejecuta iniciar.bat de nuevo " +
+      "y abre http://127.0.0.1:8000. Detalle técnico: " + e.message);
+  } finally {
+    corriendo = false;
+    $("generar").disabled = false;
+  }
+}
+
+EJEMPLOS.forEach((t) => {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "chip"; b.textContent = t.split(",")[0];
+  b.title = t; b.onclick = () => { $("prompt").value = t; };
+  $("ejemplos").appendChild(b);
+});
+$("duracion").oninput = () => { $("durTxt").textContent = $("duracion").value; };
+if (!/^https?:$/.test(location.protocol)) {
+  $("sinServidor").hidden = false;
+  $("generar").disabled = true;
+  estado("Abre la página desde servidor.py (ver aviso arriba).", "err");
+}
+$("generar").onclick = generar;
+if (leer("wan_recordar") === "1") {
+  $("recordar").checked = true;
+  $("workspace").value = leer("wan_ws") || "";
+  $("region").value = leer("wan_region") || "singapore";
+}
+</script>
+</body>
+</html>
