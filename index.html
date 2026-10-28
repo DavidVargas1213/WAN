@@ -55,6 +55,23 @@
   .acciones a, .acciones button { padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px;
     background: var(--card); color: var(--text); text-decoration: none; font-size: 14px; }
   .acciones a:hover, .acciones button:hover { border-color: var(--accent); }
+  .zona { border: 2px dashed var(--line); border-radius: 10px; padding: 16px; text-align: center;
+    color: var(--muted); cursor: pointer; }
+  .zona:hover, .zona:focus-visible, .zona.sobre { border-color: var(--accent); color: var(--text); outline: none; }
+  .refs { display: grid; gap: 10px; margin-top: 12px; }
+  .refs:empty { display: none; }
+  .ref { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 10px; align-items: center;
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: var(--bg); }
+  .ref img { width: 64px; height: 64px; object-fit: contain; background: #fff; border-radius: 6px; border: 1px solid var(--line); }
+  .ref .meta { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ref select { margin-top: 4px; }
+  .ref button { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 6px; padding: 4px 9px; }
+  .ref button:hover { border-color: var(--err); }
+  .err { color: var(--err); font-size: 13px; margin-top: 6px; }
+  details { margin-top: 12px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  #promptFinal { font-size: 13px; white-space: pre-wrap; word-break: break-word; color: var(--muted);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-top: 6px; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -97,10 +114,28 @@
       </section>
 
       <section class="card">
-        <h2>2. El video</h2>
-        <label for="prompt">Descripción (prompt)</label>
+        <h2>2. Imágenes de referencia (opcional)</h2>
+        <div class="zona" id="zona" tabindex="0" role="button">
+          Haz clic o arrastra imágenes aquí (hasta 5): logos, productos o la foto de una persona
+        </div>
+        <input id="archivos" type="file" accept="image/png,image/jpeg,image/webp,image/bmp" multiple hidden>
+        <div class="err" id="errRefs" role="alert"></div>
+        <div class="refs" id="refs"></div>
+        <p class="hint">Las imágenes se envían directo a Alibaba para generar el video; este servidor no las guarda. Los logos con fondo transparente se pasan a fondo blanco. Wan usa las imágenes como referencia: el parecido y los textos de un logo no están garantizados al 100 %.</p>
+        <label class="check" id="consentimiento" hidden><input id="permiso" type="checkbox"> Tengo permiso de la persona que aparece en la foto para usar su imagen en este video.</label>
+      </section>
+
+      <section class="card">
+        <h2>3. El video</h2>
+        <label for="prompt">Descripción de la escena (prompt)</label>
         <textarea id="prompt" placeholder="Un colibrí bebiendo de una flor en cámara lenta, luz de atardecer..."></textarea>
         <div class="chips" id="ejemplos"></div>
+
+        <div id="bloqueHabla" hidden>
+          <label for="habla">Texto que dirá la persona (opcional)</label>
+          <textarea id="habla" style="min-height: 80px;" placeholder="Hola, bienvenidos a nuestro canal. Hoy les voy a contar algo increíble."></textarea>
+          <p class="hint" id="hablaHint"></p>
+        </div>
 
         <div class="row">
           <div>
@@ -136,6 +171,12 @@
         </div>
         <label class="check"><input id="audio" type="checkbox" checked> Con audio (no cambia el precio)</label>
         <label class="check"><input id="extender" type="checkbox" checked> Mejorar el prompt automáticamente (recomendado para prompts cortos)</label>
+        <p class="hint" id="extenderHint" hidden>Se desactiva cuando hay texto hablado para que Alibaba no lo reescriba.</p>
+
+        <details>
+          <summary>Ver el prompt final que se enviará</summary>
+          <div id="promptFinal"></div>
+        </details>
 
         <button id="generar">Generar video</button>
         <p class="hint">Cada generación consume saldo de tu cuenta. Para probar, usa 480P y 5 segundos.</p>
@@ -209,9 +250,12 @@ const espera = (ms) => new Promise((res) => setTimeout(res, ms));
 async function generar() {
   if (corriendo) return;
   const cuenta = { api_key: $("apikey").value.trim(), workspace_id: $("workspace").value.trim(), region: $("region").value };
-  const prompt = $("prompt").value.trim();
+  const prompt = armarPrompt();
   if (!cuenta.api_key || !cuenta.workspace_id) return estado("Falta la API key o el Workspace ID.", "err");
-  if (!prompt) return estado("Escribe una descripción para el video.", "err");
+  if (!$("prompt").value.trim() && !hablaTexto()) return estado("Escribe una descripción para el video.", "err");
+  if (refs.some((r) => !r.rol)) return estado("Indica qué es cada imagen (logo u objeto, o cara).", "err");
+  if (hayCara() && !$("permiso").checked) return estado("Confirma que tienes permiso de la persona de la foto.", "err");
+  if (segundosHabla(hablaTexto()) > 30) return estado("El texto hablado es demasiado largo para un solo video (máx. 30 s).", "err");
 
   if ($("recordar").checked) { guardar("wan_ws", cuenta.workspace_id); guardar("wan_region", cuenta.region); guardar("wan_recordar", "1"); }
   else { borrar("wan_ws"); borrar("wan_region"); borrar("wan_recordar"); }
@@ -224,10 +268,11 @@ async function generar() {
       ratio: $("ratio").value,
       duration: parseInt($("duracion").value, 10),
       audio: $("audio").checked,
-      prompt_extend: $("extender").checked,
+      prompt_extend: $("extender").checked && !hablaTexto(),
       watermark: false,
     },
   };
+  if (refs.length) payload.input.media = refs.map((r) => ({ type: "reference_image", url: r.dataUri }));
 
   corriendo = true;
   $("generar").disabled = true;
@@ -270,22 +315,153 @@ async function generar() {
       await espera(15000);
     }
   } catch (e) {
-    estado("No se pudo contactar el programa local", "err",
-      "Parece que servidor.py no está corriendo (o se cerró su ventana). Ejecuta iniciar.bat de nuevo " +
-      "y abre http://127.0.0.1:8000. Detalle técnico: " + e.message);
+    estado("No se pudo contactar el servidor", "err",
+      "Recarga la página e inténtalo de nuevo. Si lo usas en tu PC, comprueba que servidor.py siga corriendo. " +
+      "Detalle técnico: " + e.message);
   } finally {
     corriendo = false;
     $("generar").disabled = false;
   }
 }
 
+const MAX_IMG = 5;
+const ROLES = { logo: "Logo u objeto", cara: "Cara de una persona (avatar)" };
+const refs = [];
+let extenderPrevio = true;
+
+const hayCara = () => refs.some((r) => r.rol === "cara");
+const hablaTexto = () => (hayCara() ? $("habla").value.trim() : "");
+const segundosHabla = (t) => (t ? Math.ceil(t.split(/\s+/).filter(Boolean).length / 2.3 + 1) : 0);
+
+function armarPrompt() {
+  const partes = [];
+  let hablante = 0;
+  refs.forEach((r, i) => {
+    const n = i + 1;
+    if (r.rol === "logo") {
+      partes.push("Image " + n + " es un logo u objeto de referencia: debe aparecer visible y fiel al original, sin alterar su forma ni sus colores.");
+    } else if (r.rol === "cara") {
+      partes.push("Image " + n + " es la persona protagonista: conserva exactamente su rostro y rasgos.");
+      if (!hablante) hablante = n;
+    }
+  });
+  const habla = hablaTexto();
+  if (habla && hablante) {
+    partes.push("La persona de Image " + hablante + " mira a la cámara y dice en voz alta, en español: \"" + habla.replace(/"/g, "'") + "\"");
+  }
+  const escena = $("prompt").value.trim();
+  if (escena) partes.push(escena);
+  return partes.join(" ");
+}
+
+function actualizar() {
+  const cara = hayCara();
+  $("bloqueHabla").hidden = !cara;
+  $("consentimiento").hidden = !cara;
+  const habla = hablaTexto();
+  const ext = $("extender");
+  if (habla) {
+    if (!ext.disabled) extenderPrevio = ext.checked;
+    ext.checked = false;
+    ext.disabled = true;
+    $("extenderHint").hidden = false;
+    const est = segundosHabla(habla);
+    $("hablaHint").textContent = "≈ " + est + " s hablados. " +
+      (est > 30 ? "Es demasiado largo para un solo video (máx. 30 s): acórtalo." : "La duración mínima se ajusta al texto.");
+    if (est <= 30 && parseInt($("duracion").value, 10) < est) {
+      $("duracion").value = est;
+      $("durTxt").textContent = est;
+    }
+  } else {
+    if (ext.disabled) { ext.disabled = false; ext.checked = extenderPrevio; }
+    $("extenderHint").hidden = true;
+    $("hablaHint").textContent = "";
+  }
+  $("promptFinal").textContent = armarPrompt() || "(escribe una descripción)";
+}
+
+async function procesarImagen(file) {
+  let bmp;
+  try { bmp = await createImageBitmap(file); } catch (e) { throw new Error("no se pudo leer la imagen."); }
+  const mayor = Math.max(bmp.width, bmp.height);
+  const menor = Math.min(bmp.width, bmp.height);
+  if (mayor / menor > 8) { bmp.close(); throw new Error("es demasiado alargada (máximo 8:1)."); }
+  let esc = mayor > 1280 ? 1280 / mayor : 1;
+  if (menor * esc < 256) esc = 256 / menor;
+  const ancho = Math.round(bmp.width * esc);
+  const alto = Math.round(bmp.height * esc);
+  const c = document.createElement("canvas");
+  c.width = ancho; c.height = alto;
+  const g = c.getContext("2d");
+  g.fillStyle = "#ffffff";
+  g.fillRect(0, 0, ancho, alto);
+  g.drawImage(bmp, 0, 0, ancho, alto);
+  bmp.close();
+  return { dataUri: c.toDataURL("image/jpeg", 0.9), ancho, alto };
+}
+
+function dibujarRefs() {
+  const cont = $("refs");
+  cont.textContent = "";
+  refs.forEach((r, i) => {
+    const fila = document.createElement("div");
+    fila.className = "ref";
+    const img = document.createElement("img");
+    img.src = r.dataUri; img.alt = "";
+    const centro = document.createElement("div");
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = "Image " + (i + 1) + " · " + r.nombre + " · " + r.ancho + "×" + r.alto;
+    const sel = document.createElement("select");
+    sel.setAttribute("aria-label", "Qué es la imagen " + (i + 1));
+    sel.add(new Option("¿Qué es esta imagen?", ""));
+    Object.entries(ROLES).forEach(([v, txt]) => sel.add(new Option(txt, v)));
+    sel.value = r.rol;
+    sel.onchange = () => { r.rol = sel.value; actualizar(); };
+    centro.append(meta, sel);
+    const quitar = document.createElement("button");
+    quitar.type = "button"; quitar.textContent = "Quitar";
+    quitar.onclick = () => { refs.splice(i, 1); dibujarRefs(); actualizar(); };
+    fila.append(img, centro, quitar);
+    cont.appendChild(fila);
+  });
+}
+
+async function agregarArchivos(lista) {
+  const errores = [];
+  for (const f of Array.from(lista)) {
+    if (refs.length >= MAX_IMG) { errores.push("Máximo " + MAX_IMG + " imágenes."); break; }
+    if (!/^image\/(png|jpeg|webp|bmp)$/.test(f.type)) { errores.push(f.name + ": formato no admitido (usa PNG, JPG, WEBP o BMP)."); continue; }
+    if (f.size > 20 * 1024 * 1024) { errores.push(f.name + ": pesa más de 20 MB."); continue; }
+    try {
+      refs.push({ nombre: f.name, rol: "", ...(await procesarImagen(f)) });
+    } catch (e) {
+      errores.push(f.name + ": " + e.message);
+    }
+  }
+  dibujarRefs();
+  actualizar();
+  $("errRefs").textContent = errores.join(" ");
+}
+
+const zona = $("zona");
+zona.onclick = () => $("archivos").click();
+zona.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("archivos").click(); } };
+zona.ondragover = (e) => { e.preventDefault(); zona.classList.add("sobre"); };
+zona.ondragleave = () => zona.classList.remove("sobre");
+zona.ondrop = (e) => { e.preventDefault(); zona.classList.remove("sobre"); agregarArchivos(e.dataTransfer.files); };
+$("archivos").onchange = (e) => { const f = Array.from(e.target.files); e.target.value = ""; agregarArchivos(f); };
+$("prompt").oninput = actualizar;
+$("habla").oninput = actualizar;
+
 EJEMPLOS.forEach((t) => {
   const b = document.createElement("button");
   b.type = "button"; b.className = "chip"; b.textContent = t.split(",")[0];
-  b.title = t; b.onclick = () => { $("prompt").value = t; };
+  b.title = t; b.onclick = () => { $("prompt").value = t; actualizar(); };
   $("ejemplos").appendChild(b);
 });
-$("duracion").oninput = () => { $("durTxt").textContent = $("duracion").value; };
+$("duracion").oninput = () => { $("durTxt").textContent = $("duracion").value; actualizar(); };
+actualizar();
 if (!/^https?:$/.test(location.protocol)) {
   $("sinServidor").hidden = false;
   $("generar").disabled = true;

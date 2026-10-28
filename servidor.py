@@ -44,8 +44,36 @@ EN_NUBE = "PORT" in os.environ
 HOST = "0.0.0.0" if EN_NUBE else "127.0.0.1"
 PORT = int(os.environ.get("PORT", 8000))
 RUTA_CREAR = "/api/v1/services/aigc/video-generation/video-synthesis"
-MAX_CUERPO = 64 * 1024
+MAX_CUERPO = 16 * 1024 * 1024  # hasta 5 imágenes en base64 + texto
 LIMITE_POR_MINUTO = 60
+MODELOS = {"wan3.0-video-prime", "wan3.0-video"}
+PARAMETROS = {"resolution", "ratio", "duration", "audio", "prompt_extend", "watermark", "seed"}
+MAX_IMAGENES = 5
+MAX_DATA_URI = 4 * 1024 * 1024
+
+
+def validar_payload(p):
+    """Devuelve un mensaje de error, o None si el payload es aceptable."""
+    if p.get("model") not in MODELOS:
+        return "Modelo no permitido"
+    entrada = p.get("input")
+    if not isinstance(entrada, dict) or not isinstance(entrada.get("prompt"), str) or not entrada["prompt"].strip():
+        return "Falta el prompt"
+    if len(entrada["prompt"]) > 5000:
+        return "Prompt demasiado largo"
+    media = entrada.get("media", [])
+    if not isinstance(media, list) or len(media) > MAX_IMAGENES:
+        return f"Máximo {MAX_IMAGENES} imágenes"
+    for m in media:
+        url = m.get("url") if isinstance(m, dict) else None
+        if not isinstance(m, dict) or m.get("type") != "reference_image" or not isinstance(url, str):
+            return "Solo se permiten imágenes de referencia"
+        if not re.match(r"data:image/(jpeg|png|webp|bmp);base64,[A-Za-z0-9+/=]+$", url) or len(url) > MAX_DATA_URI:
+            return "Imagen inválida o demasiado grande"
+    params = p.get("parameters", {})
+    if not isinstance(params, dict) or set(params) - PARAMETROS:
+        return "Parámetros no permitidos"
+    return None
 
 _visitas = defaultdict(deque)
 _candado = threading.Lock()
@@ -148,6 +176,9 @@ class Handler(BaseHTTPRequestHandler):
             payload = entrada.get("payload")
             if not isinstance(payload, dict):
                 return self._error(400, "SolicitudInvalida", "Falta el payload")
+            problema = validar_payload(payload)
+            if problema:
+                return self._error(400, "SolicitudInvalida", problema)
             status, cuerpo = llamar("POST", base + RUTA_CREAR, api_key, payload, async_=True)
         elif self.path == "/api/estado":
             task_id = entrada.get("task_id", "")

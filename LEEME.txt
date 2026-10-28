@@ -24,6 +24,20 @@ Cómo usarlo
 
 Para detenerlo: cierra la ventana negra o presiona Ctrl+C.
 
+Imágenes de referencia (logos, productos, personas)
+---------------------------------------------------
+- Sube hasta 5 imágenes (PNG, JPG, WEBP o BMP) y marca qué es cada una:
+  * "Logo u objeto": Wan intenta que aparezca fiel en el video (ej. un logo impreso en una taza).
+  * "Cara de una persona (avatar)": Wan intenta conservar el rostro. Aparece un campo para el
+    texto que dirá la persona y hay que confirmar que se tiene permiso de la persona de la foto.
+- Las imágenes se reducen en el navegador (máx. 1280 px) y se envían a Alibaba en base64; el
+  servidor no las guarda. Los logos con fondo transparente se pasan a fondo blanco.
+- Se agregan al prompt las frases "Image 1 es ...", "Image 2 es ..." automáticamente; puedes ver el
+  prompt final en el desplegable "Ver el prompt final".
+- Si hay texto hablado, se desactiva "Mejorar el prompt" para que Alibaba no lo reescriba, y la
+  duración mínima se ajusta al texto (unas 2,3 palabras por segundo).
+- Límites: imágenes de 240 a 8000 px por lado, proporción máxima 8:1, 20 MB.
+
 Publicarlo en internet (URL para varias personas)
 -------------------------------------------------
 Un hosting estático (GitHub Pages, Netlify) NO sirve: la API de Alibaba bloquea las llamadas
